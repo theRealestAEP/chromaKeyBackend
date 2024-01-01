@@ -1,0 +1,244 @@
+import { Context, Elysia} from "elysia";
+import ffmpeg from 'fluent-ffmpeg';
+import { v4 as uuidv4 } from 'uuid';
+const Jimp = require('jimp');
+const fs = require('fs');
+const path = require('path');
+
+
+const chromaKeyVideo = (inputPath: string, outputPath: string, color: string, similarity: number, blend: number, frameDirectory: string): Promise<void> => {
+    return new Promise<void>((resolve, reject) => {
+        ffmpeg()
+            .input(inputPath)
+            .videoFilter(`colorkey=color=${color}:similarity=${similarity}:blend=${blend}`)
+            .outputOptions('-c:v', 'libvpx')
+            .outputOptions('-auto-alt-ref', '0')
+            .outputOptions('-pix_fmt', 'yuva420p')
+            .save(outputPath)
+            .on("progress", (progress) => console.log(progress))
+            .on('end', () => {
+                console.log('Chroma keying completed.');
+                cleanupFiles(inputPath, frameDirectory);
+                resolve(); // Resolve without a value
+            })
+            .on('error', (err) => {
+                console.error('Error during chroma keying:', err);
+                cleanupFiles(inputPath, frameDirectory);
+                reject(err);
+            })
+            .run();
+    });
+};
+
+
+
+
+const extractFrames = async (videoPath: string, taskId: string, frameRate = 1): Promise<string> => {
+    return new Promise<string>((resolve, reject) => {
+        const frameDirectory = path.join(__dirname, `frames-${taskId}`);
+        if (!fs.existsSync(frameDirectory)) {
+            fs.mkdirSync(frameDirectory);
+        }
+        console.log('Starting frame extraction for:', videoPath);
+
+        ffmpeg(videoPath)
+            .save(`${frameDirectory}/frame-%03d.jpg`)
+            .noAudio()
+            .videoFilters(`fps=fps=${frameRate}`)
+            .on("progress", progress => console.log('Frame extraction progress:', progress))
+            .on('error', error => {
+                console.error('Error during frame extraction:', error);
+                reject(error)
+            })
+            .on('end', () => {
+                console.log('Frame extraction completed.');
+                resolve(frameDirectory);
+            })
+            .run();
+    });
+}
+
+const findMostCommonColor = async (imagePath: string) => {
+    console.log('getting most common color')
+    try {
+        const image = await Jimp.read(imagePath);
+        const colorCounts: Record<string, number> = {};
+
+        image.scan(0, 0, image.bitmap.width, image.bitmap.height, function (x: number, y: number, idx: any) {
+            const hex = Jimp.intToRGBA(image.getPixelColor(x, y));
+            const hexString = Jimp.rgbaToInt(hex.r, hex.g, hex.b, hex.a).toString(16);
+
+            colorCounts[hexString] = (colorCounts[hexString] || 0) + 1;
+        });
+
+        let mostCommonColor = Object.keys(colorCounts).reduce((a, b) => colorCounts[a] > colorCounts[b] ? a : b);
+
+        mostCommonColor = mostCommonColor.padStart(6, '0');
+
+        return `#${mostCommonColor}`;
+    } catch (error) {
+        console.error("An error occurred:", error);
+        return null;
+    }
+}
+
+
+interface AnalyzeVideoResult {
+    mostCommonColor: string;
+    frameDirectory: string;
+}
+
+const analyzeVideo = async (videoPath: string, taskId: string): Promise<AnalyzeVideoResult | null> => {
+    try {
+        console.log('getting Frame');
+        // Ensure frameDirectory is declared as a string
+        const frameDirectory: string = await extractFrames(videoPath, taskId); 
+        console.log(frameDirectory);
+
+        const files = fs.readdirSync(frameDirectory);
+        const colorCounts: Record<string, number> = {};
+
+        for (let file of files) {
+            const color = await findMostCommonColor(path.join(frameDirectory, file));
+            if (color !== null) {
+                colorCounts[color] = (colorCounts[color] || 0) + 1;
+            }
+        }
+
+        let mostCommonColor = Object.keys(colorCounts).reduce((a, b) => colorCounts[a] > colorCounts[b] ? a : b);
+
+        return { mostCommonColor, frameDirectory };
+    } catch (error) {
+        console.error("An error occurred:", error);
+        return null;
+    }
+}
+
+
+const cleanupFiles = (filePath: string, frameDirectory: string) => {
+    // Delete the uploaded video file
+    if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+    }
+
+    // Delete the extracted frames
+    if (fs.existsSync(frameDirectory)) {
+        fs.readdirSync(frameDirectory).forEach((file: any) => {
+            fs.unlinkSync(path.join(frameDirectory, file));
+        });
+        fs.rmdirSync(frameDirectory);
+    }
+};
+
+interface TaskInfo {
+    status: 'processing' | 'completed' | 'error';
+    downloadLink?: string;
+    error?: string;
+}
+
+const taskStatusMap: Map<string, TaskInfo> = new Map();
+
+const processVideo = async (taskId: string, filePath: string, outputPath: string): Promise<void>  => {
+    try {
+        taskStatusMap.set(taskId, { status: 'processing' });
+        const analysisResult = await analyzeVideo(filePath, taskId);
+
+        if (analysisResult && analysisResult.mostCommonColor) {
+            await chromaKeyVideo(filePath, outputPath, analysisResult.mostCommonColor, 0.4, 0.1, analysisResult.frameDirectory);
+            taskStatusMap.set(taskId, { status: 'completed', downloadLink: `/download/${path.basename(outputPath)}` });
+            //need to add handling if this rejects to give it a status of failed 
+        } else {
+            throw new Error('Chroma key analysis failed');
+        }
+    } catch (error:any) {
+        console.error('Error in processing video:', error);
+        if(error.message){
+            taskStatusMap.set(taskId, { status: 'error', error: error.message });
+        }
+    }
+}
+
+const app = new Elysia();
+const port = 8080;
+const uploadDir = path.join(__dirname, 'uploads');
+const outputDir = path.join(__dirname, 'output');
+
+const ensureDirectoryExists = (dir:string) => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  }
+  
+  // Ensure both directories exist
+  ensureDirectoryExists(uploadDir);
+  ensureDirectoryExists(outputDir);
+
+app.post("/upload", async (ctx:any) => {
+    console.log(ctx)
+    try {
+      const f = ctx.body.video;
+      if (!f) {
+          ctx.status = 400;
+          ctx.body = { error: 'No video file provided' };
+          return ctx;
+      }
+  
+      const taskId = uuidv4();
+      const fileName = `${taskId}.mp4`;
+      const fileNameOut = `${taskId}.webm`;
+      const filePath = `${uploadDir}/${fileName}`;
+      const outputPath = `${outputDir}/${fileNameOut}`;
+  
+      await Bun.write(Bun.file(filePath), f);
+  
+      // Start the asynchronous video processing
+      processVideo(taskId, filePath, outputPath);
+  
+      // Immediately respond with the taskId
+      ctx.status = 200;
+      ctx.body = { taskId };
+      return  { taskId };
+    } catch (error) {
+        console.error('Error in /upload route:', error);
+        ctx.status = 500;
+        ctx.body = { error: 'Internal Server Error' };
+        return { error: 'Internal Server Error' };
+    }
+  });
+
+  app.get("/download/:fileName",  async (ctx:any) => {
+    const fileName = ctx.params.fileName;
+    const filePath = path.join(outputDir, fileName);
+
+    if (!fs.existsSync(filePath)) {
+        ctx.status = 404;
+        ctx.body = 'File not found';
+        return 'File not found';
+    }
+    // Directly set the body to the read stream
+    // ctx.body = fs.createReadStream(filePath);
+    return Bun.file(filePath);
+    // return ctx.body
+});
+
+app.get("/status/:taskId", async (ctx: any) => {
+    const taskId: string = ctx.params.taskId;
+    const taskInfo = taskStatusMap.get(taskId);
+
+    if (taskInfo) {
+        ctx.status = 200;
+        ctx.body = taskInfo;
+    } else {
+        ctx.status = 404;
+        return { error: 'Task not found' };
+    }
+    return {taskInfo}
+});
+
+
+
+app.listen(port, () => console.log(`Server running on port ${port}`));
+
+
+//make the image frames temporary
+//make the video temporary
