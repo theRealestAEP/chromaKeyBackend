@@ -1,4 +1,4 @@
-import { Context, Elysia} from "elysia";
+import { t, Elysia } from "elysia";
 import ffmpeg from 'fluent-ffmpeg';
 import { v4 as uuidv4 } from 'uuid';
 const Jimp = require('jimp');
@@ -94,7 +94,7 @@ const analyzeVideo = async (videoPath: string, taskId: string): Promise<AnalyzeV
     try {
         console.log('getting Frame');
         // Ensure frameDirectory is declared as a string
-        const frameDirectory: string = await extractFrames(videoPath, taskId); 
+        const frameDirectory: string = await extractFrames(videoPath, taskId);
         console.log(frameDirectory);
 
         const files = fs.readdirSync(frameDirectory);
@@ -118,6 +118,7 @@ const analyzeVideo = async (videoPath: string, taskId: string): Promise<AnalyzeV
 
 
 const cleanupFiles = (filePath: string, frameDirectory: string) => {
+    console.log(`Cleaning up files for ${filePath}\n`)
     // Delete the uploaded video file
     if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
@@ -125,6 +126,7 @@ const cleanupFiles = (filePath: string, frameDirectory: string) => {
 
     // Delete the extracted frames
     if (fs.existsSync(frameDirectory)) {
+        console.log('Deleting frame directory:', frameDirectory);
         fs.readdirSync(frameDirectory).forEach((file: any) => {
             fs.unlinkSync(path.join(frameDirectory, file));
         });
@@ -144,12 +146,12 @@ await init.run();
 
 // const taskStatusMap: Map<string, TaskInfo> = new Map();
 
-const processVideo = async (taskId: string, filePath: string, outputPath: string): Promise<void>  => {
+const processVideo = async (taskId: string, filePath: string, outputPath: string): Promise<void> => {
     try {
         // taskStatusMap.set(taskId, { status: 'processing' });
         const insertOrUpdateTask = db.query("INSERT INTO tasks (taskId, status, downloadLink) VALUES (?, ?, ?) ON CONFLICT(taskId) DO UPDATE SET status=?, downloadLink=?");
         insertOrUpdateTask.run(taskId, 'processing', null, 'processing', null);
-        
+
         const analysisResult = await analyzeVideo(filePath, taskId);
 
         if (analysisResult && analysisResult.mostCommonColor) {
@@ -162,9 +164,9 @@ const processVideo = async (taskId: string, filePath: string, outputPath: string
         } else {
             throw new Error('Chroma key analysis failed');
         }
-    } catch (error:any) {
+    } catch (error: any) {
         console.error('Error in processing video:', error);
-        if(error.message){
+        if (error.message) {
             // taskStatusMap.set(taskId, { status: 'error', error: error.message });
             // let errorMessage = error.message ? error.message : 'Unknown error';
             console.error('Error in processing video:', error);
@@ -179,50 +181,58 @@ const port = 8080;
 const uploadDir = path.join(__dirname, 'uploads');
 const outputDir = path.join(__dirname, 'output');
 
-const ensureDirectoryExists = (dir:string) => {
+const ensureDirectoryExists = (dir: string) => {
     if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+        fs.mkdirSync(dir, { recursive: true });
     }
-  }
-  
-  // Ensure both directories exist
-  ensureDirectoryExists(uploadDir);
-  ensureDirectoryExists(outputDir);
+}
 
-app.post("/upload", async (ctx:any) => {
-    console.log(ctx)
+// Ensure both directories exist
+ensureDirectoryExists(uploadDir);
+ensureDirectoryExists(outputDir);
+
+app.post("/upload", async (ctx: any) => {
+    // console.log(ctx)
+    console.log(typeof (ctx.body.video))
     try {
-      const f = ctx.body.video;
-      if (!f) {
-          ctx.status = 400;
-          ctx.body = { error: 'No video file provided' };
-          return ctx;
-      }
-  
-      const taskId = uuidv4();
-      const fileName = `${taskId}.mp4`;
-      const fileNameOut = `${taskId}.webm`;
-      const filePath = `${uploadDir}/${fileName}`;
-      const outputPath = `${outputDir}/${fileNameOut}`;
-  
-      await Bun.write(Bun.file(filePath), f);
-  
-      // Start the asynchronous video processing
-      processVideo(taskId, filePath, outputPath);
-  
-      // Immediately respond with the taskId
-      ctx.status = 200;
-      ctx.body = { taskId };
-      return  { taskId };
+        const f = ctx.body.video;
+        if (!f) {
+            ctx.status = 400;
+            ctx.body = { error: 'No video file provided' };
+            return ctx;
+        }
+
+        const taskId = uuidv4();
+        const fileName = `${taskId}.mp4`;
+        const fileNameOut = `${taskId}.webm`;
+        const filePath = `${uploadDir}/${fileName}`;
+        const outputPath = `${outputDir}/${fileNameOut}`;
+
+        await Bun.write(Bun.file(filePath), f);
+
+        // Start the asynchronous video processing
+        processVideo(taskId, filePath, outputPath);
+
+        // Immediately respond with the taskId
+        ctx.status = 200;
+        ctx.body = { taskId };
+        return { taskId };
     } catch (error) {
         console.error('Error in /upload route:', error);
         ctx.status = 500;
         ctx.body = { error: 'Internal Server Error' };
         return { error: 'Internal Server Error' };
     }
-  });
+}
+    ,
+    {
+        body: t.Object({
+            video: t.Object({}) // Assuming the video is represented as a string, adjust accordingly
+        })
+    }
+);
 
-  app.get("/download/:fileName",  async (ctx:any) => {
+app.get("/download/:fileName", async (ctx: any) => {
     const fileName = ctx.params.fileName;
     const filePath = path.join(outputDir, fileName);
 
@@ -235,6 +245,10 @@ app.post("/upload", async (ctx:any) => {
     // ctx.body = fs.createReadStream(filePath);
     return Bun.file(filePath);
     // return ctx.body
+}, {
+    params: t.Object({
+        fileName: t.String() // Validate fileName as a string
+    })
 });
 
 interface TaskRow {
@@ -272,14 +286,44 @@ app.get("/status/:taskId", async (ctx: any) => {
     if (!taskInfo) {
         return { error: 'Task not found' };
     }
-    return {taskInfo}
-});
+    return { taskInfo }
+}, {
+    params: t.Object({
+        taskId: t.String() // Validate taskId as a string
+    })
+})
 
+const handleInterruptedTasks = async () => {
+    try {
+        const interruptedTasksQuery = db.query("SELECT taskId FROM tasks WHERE status = 'processing'");
+        const interruptedTasks = await interruptedTasksQuery.all() as { taskId: string }[];
+
+        if (interruptedTasks.length > 0) {
+            console.log(`Found ${interruptedTasks.length} interrupted tasks. Updating status to 'failed'.`);
+            const updateTaskStatus = db.query("UPDATE tasks SET status='failed' WHERE taskId=?");
+
+            for (const task of interruptedTasks) {
+                await updateTaskStatus.run(task.taskId);
+                const inputPath = `${uploadDir}/${task.taskId}.mp4`;
+                const frameDirectory =  path.join(__dirname, `frames-${task.taskId}`);
+            
+                cleanupFiles(inputPath, frameDirectory);
+            }
+        }
+    } catch (error) {
+        console.error('Error handling interrupted tasks:', error);
+    }
+};
 
 // app.use(cors())
-
+handleInterruptedTasks()
 app.listen(port, () => console.log(`Server running on port ${port}`));
 
+//todo
+/*
+better clean up of files in case of failure 
+better progress bar reporting
+ensure no SQL injections are possible
+*/
 
-//make the image frames temporary
-//make the video temporary
+// /Users/alexpickett/Desktop/Projects/ChromaKeyUtil/frames-fcdcf467-c0f0-4172-97d0-2781a80bf5b3
