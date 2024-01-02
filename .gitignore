@@ -180,3 +180,5 @@ testVideo/
 
 # Ignore any directories starting with 'frames-'
 frames-*/
+
+taskIDs.sqlite

@@ -4,6 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 const Jimp = require('jimp');
 const fs = require('fs');
 const path = require('path');
+import { cors } from '@elysiajs/cors'
+import { Database } from "bun:sqlite";
 
 
 const chromaKeyVideo = (inputPath: string, outputPath: string, color: string, similarity: number, blend: number, frameDirectory: string): Promise<void> => {
@@ -136,16 +138,26 @@ interface TaskInfo {
     error?: string;
 }
 
-const taskStatusMap: Map<string, TaskInfo> = new Map();
+const db = new Database("taskIDs.sqlite", { create: true })
+const init = db.query("CREATE TABLE IF NOT EXISTS tasks (taskId TEXT PRIMARY KEY, status TEXT, downloadLink TEXT)");
+await init.run();
+
+// const taskStatusMap: Map<string, TaskInfo> = new Map();
 
 const processVideo = async (taskId: string, filePath: string, outputPath: string): Promise<void>  => {
     try {
-        taskStatusMap.set(taskId, { status: 'processing' });
+        // taskStatusMap.set(taskId, { status: 'processing' });
+        const insertOrUpdateTask = db.query("INSERT INTO tasks (taskId, status, downloadLink) VALUES (?, ?, ?) ON CONFLICT(taskId) DO UPDATE SET status=?, downloadLink=?");
+        insertOrUpdateTask.run(taskId, 'processing', null, 'processing', null);
+        
         const analysisResult = await analyzeVideo(filePath, taskId);
 
         if (analysisResult && analysisResult.mostCommonColor) {
             await chromaKeyVideo(filePath, outputPath, analysisResult.mostCommonColor, 0.4, 0.1, analysisResult.frameDirectory);
-            taskStatusMap.set(taskId, { status: 'completed', downloadLink: `/download/${path.basename(outputPath)}` });
+            const downloadLink = `/download/${path.basename(outputPath)}`;
+            const updateTask = db.query("UPDATE tasks SET status=?, downloadLink=? WHERE taskId=?");
+            updateTask.run('completed', downloadLink, taskId);
+            // taskStatusMap.set(taskId, { status: 'completed', downloadLink: `/download/${path.basename(outputPath)}` });
             //need to add handling if this rejects to give it a status of failed 
         } else {
             throw new Error('Chroma key analysis failed');
@@ -153,7 +165,11 @@ const processVideo = async (taskId: string, filePath: string, outputPath: string
     } catch (error:any) {
         console.error('Error in processing video:', error);
         if(error.message){
-            taskStatusMap.set(taskId, { status: 'error', error: error.message });
+            // taskStatusMap.set(taskId, { status: 'error', error: error.message });
+            // let errorMessage = error.message ? error.message : 'Unknown error';
+            console.error('Error in processing video:', error);
+            const updateTaskError = db.query("UPDATE tasks SET status=?, downloadLink=NULL WHERE taskId=?");
+            updateTaskError.run('error', taskId);
         }
     }
 }
@@ -221,21 +237,46 @@ app.post("/upload", async (ctx:any) => {
     // return ctx.body
 });
 
+interface TaskRow {
+    status: 'processing' | 'completed' | 'error';
+    downloadLink?: string;
+    // Include other columns if there are more
+}
+
+const getTaskInfo = async (taskId: string): Promise<TaskInfo | undefined> => {
+    try {
+        // Prepare and execute your query
+        const getTaskQuery = db.query("SELECT status, downloadLink FROM tasks WHERE taskId = ?");
+        const taskRow = await getTaskQuery.get(taskId) as TaskRow | undefined;
+
+
+        if (taskRow) {
+            const taskInfo: TaskInfo = {
+                status: taskRow.status,
+                downloadLink: taskRow.downloadLink, // This will be undefined if downloadLink is null in the database
+            };
+            return taskInfo; // This is automatically wrapped in a Promise because of async
+        } else {
+            return undefined; // This is automatically wrapped in a Promise because of async
+        }
+    } catch (error) {
+        console.error('Error fetching task info:', error);
+        return undefined; // This is automatically wrapped in a Promise because of async
+    }
+}
+
 app.get("/status/:taskId", async (ctx: any) => {
     const taskId: string = ctx.params.taskId;
-    const taskInfo = taskStatusMap.get(taskId);
+    const taskInfo = await getTaskInfo(taskId);
 
-    if (taskInfo) {
-        ctx.status = 200;
-        ctx.body = taskInfo;
-    } else {
-        ctx.status = 404;
+    if (!taskInfo) {
         return { error: 'Task not found' };
     }
     return {taskInfo}
 });
 
 
+// app.use(cors())
 
 app.listen(port, () => console.log(`Server running on port ${port}`));
 
