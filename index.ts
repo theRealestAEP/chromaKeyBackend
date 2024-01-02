@@ -293,6 +293,11 @@ app.get("/status/:taskId", async (ctx: any) => {
     })
 })
 
+app.get("/test", async () => {
+    return "ALIVE"
+})
+
+
 const handleInterruptedTasks = async () => {
     try {
         const interruptedTasksQuery = db.query("SELECT taskId FROM tasks WHERE status = 'processing'");
