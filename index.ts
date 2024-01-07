@@ -17,7 +17,7 @@ const chromaKeyVideo = (inputPath: string, outputPath: string, color: string, si
             .outputOptions('-auto-alt-ref', '0')
             .outputOptions('-pix_fmt', 'yuva420p')
             .save(outputPath)
-            .on("progress", (progress) => console.log(progress))
+            // .on("progress", (progress) => console.log(progress))
             .on('end', () => {
                 console.log('Chroma keying completed.');
                 cleanupFiles(inputPath, frameDirectory);
@@ -66,10 +66,15 @@ const findMostCommonColor = async (imagePath: string) => {
         const image = await Jimp.read(imagePath);
         const colorCounts: Record<string, number> = {};
 
-        image.scan(0, 0, image.bitmap.width, image.bitmap.height, function (x: number, y: number, idx: any) {
+        image.scan(0, 0, image.bitmap.width, image.bitmap.height, function (x: any, y:any) {
             const hex = Jimp.intToRGBA(image.getPixelColor(x, y));
-            const hexString = Jimp.rgbaToInt(hex.r, hex.g, hex.b, hex.a).toString(16);
-
+            // Convert each color component to a hex string and pad with zeros if necessary
+            const hexString = [
+                hex.r.toString(16).padStart(2, '0'),
+                hex.g.toString(16).padStart(2, '0'),
+                hex.b.toString(16).padStart(2, '0')
+            ].join('');
+        
             colorCounts[hexString] = (colorCounts[hexString] || 0) + 1;
         });
 
@@ -77,6 +82,7 @@ const findMostCommonColor = async (imagePath: string) => {
 
         mostCommonColor = mostCommonColor.padStart(6, '0');
 
+        console.log(mostCommonColor)
         return `#${mostCommonColor}`;
     } catch (error) {
         console.error("An error occurred:", error);
@@ -108,7 +114,7 @@ const analyzeVideo = async (videoPath: string, taskId: string): Promise<AnalyzeV
         }
 
         let mostCommonColor = Object.keys(colorCounts).reduce((a, b) => colorCounts[a] > colorCounts[b] ? a : b);
-
+        console.log('most common color')
         return { mostCommonColor, frameDirectory };
     } catch (error) {
         console.error("An error occurred:", error);
@@ -155,7 +161,7 @@ const processVideo = async (taskId: string, filePath: string, outputPath: string
         const analysisResult = await analyzeVideo(filePath, taskId);
 
         if (analysisResult && analysisResult.mostCommonColor) {
-            await chromaKeyVideo(filePath, outputPath, analysisResult.mostCommonColor, 0.4, 0.1, analysisResult.frameDirectory);
+            await chromaKeyVideo(filePath, outputPath, analysisResult.mostCommonColor, 0.2, 0.2, analysisResult.frameDirectory);
             const downloadLink = `/download/${path.basename(outputPath)}`;
             const updateTask = db.query("UPDATE tasks SET status=?, downloadLink=? WHERE taskId=?");
             updateTask.run('completed', downloadLink, taskId);
@@ -177,6 +183,7 @@ const processVideo = async (taskId: string, filePath: string, outputPath: string
 }
 
 const app = new Elysia();
+app.use(cors())
 const port = 8080;
 const uploadDir = path.join(__dirname, 'uploads');
 const outputDir = path.join(__dirname, 'output');
@@ -320,7 +327,7 @@ const handleInterruptedTasks = async () => {
     }
 };
 
-// app.use(cors())
+
 handleInterruptedTasks()
 app.listen(port, () => console.log(`Server running on port ${port}`));
 
