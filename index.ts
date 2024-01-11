@@ -226,7 +226,7 @@ app.post("/upload", async (ctx: any) => {
     if (f.size > MAX_SIZE) {
         // ctx.status = 413
         status = 413
-        return new Response('No video file provided', { status: status })
+        return new Response('File Too Large > 50Mb', { status: status })
     }
 
     try {
