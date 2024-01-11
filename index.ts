@@ -332,8 +332,8 @@ handleInterruptedTasks()
 app.listen(port, () => console.log(`Server running on port ${port}`));
 
 const httpsServer = https.createServer({
-    key: fs.readFileSync('/etc/letsencrypt/live/my_api_url/privkey.pem'),
-    cert: fs.readFileSync('/etc/letsencrypt/live/my_api_url/fullchain.pem'),
+    key: fs.readFileSync('/etc/letsencrypt/live/backend.removegreenscreen.com/privkey.pem'),
+    cert: fs.readFileSync('/etc/letsencrypt/live/backend.removegreenscreen.com/fullchain.pem'),
   }, app);
   
   httpsServer.listen(443, () => {
