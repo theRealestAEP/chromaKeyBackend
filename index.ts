@@ -329,14 +329,14 @@ const handleInterruptedTasks = async () => {
 
 
 handleInterruptedTasks()
-app.listen(port, () => console.log(`Server running on port ${port}`));
+// app.listen(port, () => console.log(`Server running on port ${port}`));
 
 const httpsServer = https.createServer({
     key: fs.readFileSync('/etc/letsencrypt/live/backend.removegreenscreen.com/privkey.pem'),
     cert: fs.readFileSync('/etc/letsencrypt/live/backend.removegreenscreen.com/fullchain.pem'),
   }, app);
   
-  httpsServer.listen(443, () => {
+  httpsServer.listen(8080, () => {
       console.log('HTTPS Server running on port 443');
   });
 //todo
