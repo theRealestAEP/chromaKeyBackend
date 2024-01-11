@@ -12,6 +12,8 @@ const chromaKeyVideo = (inputPath: string, outputPath: string, color: string, si
         ffmpeg()
             .input(inputPath)
             .videoFilter(`colorkey=color=${color}:similarity=${similarity}:blend=${blend}`)
+            // Add a filter to scale the video while keeping its aspect ratio and add transparent padding to achieve a 1:1 ratio
+            .videoFilter(`scale='min(iw,ih)':min(iw,ih),pad=iw:ih:(ow-iw)/2:(oh-ih)/2:color=black@0.0`)
             .outputOptions('-c:v', 'libvpx')
             .outputOptions('-auto-alt-ref', '0')
             .outputOptions('-pix_fmt', 'yuva420p')
