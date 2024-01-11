@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 import { cors } from '@elysiajs/cors'
 import { Database } from "bun:sqlite";
-
+const https = require('https');
 
 const chromaKeyVideo = (inputPath: string, outputPath: string, color: string, similarity: number, blend: number, frameDirectory: string): Promise<void> => {
     return new Promise<void>((resolve, reject) => {
@@ -331,6 +331,14 @@ const handleInterruptedTasks = async () => {
 handleInterruptedTasks()
 app.listen(port, () => console.log(`Server running on port ${port}`));
 
+const httpsServer = https.createServer({
+    key: fs.readFileSync('/etc/letsencrypt/live/my_api_url/privkey.pem'),
+    cert: fs.readFileSync('/etc/letsencrypt/live/my_api_url/fullchain.pem'),
+  }, app);
+  
+  httpsServer.listen(443, () => {
+      console.log('HTTPS Server running on port 443');
+  });
 //todo
 /*
 better clean up of files in case of failure 
