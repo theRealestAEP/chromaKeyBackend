@@ -66,7 +66,7 @@ const findMostCommonColor = async (imagePath: string) => {
         const image = await Jimp.read(imagePath);
         const colorCounts: Record<string, number> = {};
 
-        image.scan(0, 0, image.bitmap.width, image.bitmap.height, function (x: any, y:any) {
+        image.scan(0, 0, image.bitmap.width, image.bitmap.height, function (x: any, y: any) {
             const hex = Jimp.intToRGBA(image.getPixelColor(x, y));
             // Convert each color component to a hex string and pad with zeros if necessary
             const hexString = [
@@ -74,7 +74,7 @@ const findMostCommonColor = async (imagePath: string) => {
                 hex.g.toString(16).padStart(2, '0'),
                 hex.b.toString(16).padStart(2, '0')
             ].join('');
-        
+
             colorCounts[hexString] = (colorCounts[hexString] || 0) + 1;
         });
 
@@ -317,8 +317,8 @@ const handleInterruptedTasks = async () => {
             for (const task of interruptedTasks) {
                 await updateTaskStatus.run(task.taskId);
                 const inputPath = `${uploadDir}/${task.taskId}.mp4`;
-                const frameDirectory =  path.join(__dirname, `frames-${task.taskId}`);
-            
+                const frameDirectory = path.join(__dirname, `frames-${task.taskId}`);
+
                 cleanupFiles(inputPath, frameDirectory);
             }
         }
@@ -329,21 +329,14 @@ const handleInterruptedTasks = async () => {
 
 
 handleInterruptedTasks()
-// app.listen(port, () => console.log(`Server running on port ${port}`));
 
-const httpsServer = https.createServer({
-    key: fs.readFileSync('/etc/letsencrypt/live/backend.removegreenscreen.com/privkey.pem'),
-    cert: fs.readFileSync('/etc/letsencrypt/live/backend.removegreenscreen.com/fullchain.pem'),
-  }, app);
-  
-  httpsServer.listen(8080, () => {
-      console.log('HTTPS Server running on port 443');
-  });
-//todo
-/*
-better clean up of files in case of failure 
-better progress bar reporting
-ensure no SQL injections are possible
-*/
-
-// /Users/alexpickett/Desktop/Projects/ChromaKeyUtil/frames-fcdcf467-c0f0-4172-97d0-2781a80bf5b3
+Bun.serve({
+    port: 8080,
+    fetch: (request) => {
+        return app.handle(request)
+    },
+    tls: {
+        key: fs.readFileSync('/etc/letsencrypt/live/backend.removegreenscreen.com/privkey.pem'),
+        cert: fs.readFileSync('/etc/letsencrypt/live/backend.removegreenscreen.com/fullchain.pem')
+    },
+});
