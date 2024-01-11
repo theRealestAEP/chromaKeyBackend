@@ -16,7 +16,7 @@ const chromaKeyVideo = (inputPath: string, outputPath: string, color: string, si
                 `colorkey=color=${color}:similarity=${similarity}:blend=${blend},scale=800:800:force_original_aspect_ratio=decrease,pad=800:800:(ow-iw)/2:(oh-ih)/2:color=black@0`
             ])
             // Add a filter to scale the video while keeping its aspect ratio and add transparent padding to achieve a 1:1 ratio
-            .outputOptions('-c:v', 'libvpx')
+            .outputOptions('-c:v', 'libvpx-vp9')
             .outputOptions('-auto-alt-ref', '0')
             .outputOptions('-pix_fmt', 'yuva420p')
             .save(outputPath)
