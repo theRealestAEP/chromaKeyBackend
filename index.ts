@@ -192,19 +192,19 @@ const ensureDirectoryExists = (dir: string) => {
 ensureDirectoryExists(uploadDir);
 ensureDirectoryExists(outputDir);
 
-app.post("/upload", async (ctx: any, set: any) => {
+app.post("/upload", async (ctx: any) => {
     // console.log(ctx)
     console.log(typeof (ctx.body.video))
     try {
         const f = ctx.body.video;
         if (!f) {
-            set.status = 400
+            ctx.status = 400
             return { error: 'No video file provided' };
         }
 
         const MAX_SIZE = 50 * 1024 * 1024; // 50 MB in bytes
         if (f.size > MAX_SIZE) {
-            set.status = 413
+            ctx.status = 413
             return { error: 'File size exceeds 50 MB' };;
         }
         
@@ -226,7 +226,7 @@ app.post("/upload", async (ctx: any, set: any) => {
         return { taskId };
     } catch (error) {
         console.error('Error in /upload route:', error);
-        set.status = 500;
+        ctx.status = 500;
         return { error: 'Internal Server Error' };
     }
 }
@@ -238,12 +238,12 @@ app.post("/upload", async (ctx: any, set: any) => {
     }
 );
 
-app.get("/download/:fileName", async (ctx: any, set:any) => {
+app.get("/download/:fileName", async (ctx: any) => {
     const fileName = ctx.params.fileName;
     const filePath = path.join(outputDir, fileName);
 
     if (!fs.existsSync(filePath)) {
-        set.status = 404;
+        ctx.status = 404;
         // ctx.body = 'File not found';
 
         return { error: 'File not found' }
@@ -286,12 +286,12 @@ const getTaskInfo = async (taskId: string): Promise<TaskInfo | undefined> => {
     }
 }
 
-app.get("/status/:taskId", async (ctx: any, set: any) => {
+app.get("/status/:taskId", async (ctx: any) => {
     const taskId: string = ctx.params.taskId;
     const taskInfo = await getTaskInfo(taskId);
 
     if (!taskInfo) {
-        set.status = 404
+        ctx.status = 404
         return { error: 'Task not found' };
     }
     return { taskInfo }
