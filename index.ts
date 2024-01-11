@@ -6,7 +6,6 @@ const fs = require('fs');
 const path = require('path');
 import { cors } from '@elysiajs/cors'
 import { Database } from "bun:sqlite";
-const https = require('https');
 
 const chromaKeyVideo = (inputPath: string, outputPath: string, color: string, similarity: number, blend: number, frameDirectory: string): Promise<void> => {
     return new Promise<void>((resolve, reject) => {
@@ -150,11 +149,9 @@ const db = new Database("taskIDs.sqlite", { create: true })
 const init = db.query("CREATE TABLE IF NOT EXISTS tasks (taskId TEXT PRIMARY KEY, status TEXT, downloadLink TEXT)");
 await init.run();
 
-// const taskStatusMap: Map<string, TaskInfo> = new Map();
 
 const processVideo = async (taskId: string, filePath: string, outputPath: string): Promise<void> => {
     try {
-        // taskStatusMap.set(taskId, { status: 'processing' });
         const insertOrUpdateTask = db.query("INSERT INTO tasks (taskId, status, downloadLink) VALUES (?, ?, ?) ON CONFLICT(taskId) DO UPDATE SET status=?, downloadLink=?");
         insertOrUpdateTask.run(taskId, 'processing', null, 'processing', null);
 
@@ -165,8 +162,6 @@ const processVideo = async (taskId: string, filePath: string, outputPath: string
             const downloadLink = `/download/${path.basename(outputPath)}`;
             const updateTask = db.query("UPDATE tasks SET status=?, downloadLink=? WHERE taskId=?");
             updateTask.run('completed', downloadLink, taskId);
-            // taskStatusMap.set(taskId, { status: 'completed', downloadLink: `/download/${path.basename(outputPath)}` });
-            //need to add handling if this rejects to give it a status of failed 
         } else {
             throw new Error('Chroma key analysis failed');
         }
@@ -184,7 +179,6 @@ const processVideo = async (taskId: string, filePath: string, outputPath: string
 
 const app = new Elysia();
 app.use(cors())
-const port = 8080;
 const uploadDir = path.join(__dirname, 'uploads');
 const outputDir = path.join(__dirname, 'output');
 
@@ -198,16 +192,22 @@ const ensureDirectoryExists = (dir: string) => {
 ensureDirectoryExists(uploadDir);
 ensureDirectoryExists(outputDir);
 
-app.post("/upload", async (ctx: any) => {
+app.post("/upload", async (ctx: any, set: any) => {
     // console.log(ctx)
     console.log(typeof (ctx.body.video))
     try {
         const f = ctx.body.video;
         if (!f) {
-            ctx.status = 400;
-            ctx.body = { error: 'No video file provided' };
-            return ctx;
+            set.status = 400
+            return { error: 'No video file provided' };
         }
+
+        const MAX_SIZE = 50 * 1024 * 1024; // 50 MB in bytes
+        if (f.size > MAX_SIZE) {
+            set.status = 413
+            return { error: 'File size exceeds 50 MB' };;
+        }
+        
 
         const taskId = uuidv4();
         const fileName = `${taskId}.mp4`;
@@ -226,8 +226,7 @@ app.post("/upload", async (ctx: any) => {
         return { taskId };
     } catch (error) {
         console.error('Error in /upload route:', error);
-        ctx.status = 500;
-        ctx.body = { error: 'Internal Server Error' };
+        set.status = 500;
         return { error: 'Internal Server Error' };
     }
 }
@@ -239,14 +238,15 @@ app.post("/upload", async (ctx: any) => {
     }
 );
 
-app.get("/download/:fileName", async (ctx: any) => {
+app.get("/download/:fileName", async (ctx: any, set:any) => {
     const fileName = ctx.params.fileName;
     const filePath = path.join(outputDir, fileName);
 
     if (!fs.existsSync(filePath)) {
-        ctx.status = 404;
-        ctx.body = 'File not found';
-        return 'File not found';
+        set.status = 404;
+        // ctx.body = 'File not found';
+
+        return { error: 'File not found' }
     }
     // Directly set the body to the read stream
     // ctx.body = fs.createReadStream(filePath);
@@ -286,11 +286,12 @@ const getTaskInfo = async (taskId: string): Promise<TaskInfo | undefined> => {
     }
 }
 
-app.get("/status/:taskId", async (ctx: any) => {
+app.get("/status/:taskId", async (ctx: any, set: any) => {
     const taskId: string = ctx.params.taskId;
     const taskInfo = await getTaskInfo(taskId);
 
     if (!taskInfo) {
+        set.status = 404
         return { error: 'Task not found' };
     }
     return { taskInfo }
