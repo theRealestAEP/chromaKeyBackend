@@ -188,6 +188,35 @@ const ensureDirectoryExists = (dir: string) => {
     }
 }
 
+class FileTooLargeError extends Error {
+    constructor() {
+      super('FileTooLargeError')
+    }
+}
+
+class FileNotAllowedError extends Error {
+    constructor(){
+        super('FileNotAllowedError')
+    }
+}
+
+app.onError(({ code, error }) => {
+    console.error('Error occurred:', error);
+    let status
+    switch (code) {
+        case 'NOT_FOUND':
+            status = 404;
+            return 'Not Found';
+        case 'INTERNAL_SERVER_ERROR':
+            status = 500;
+            return 'Internal Server Error';
+        // Add more cases as needed
+        default:
+            status = 500;
+            return new Response(error.toString(), {status:status})
+    }
+});
+ 
 // Ensure both directories exist
 ensureDirectoryExists(uploadDir);
 ensureDirectoryExists(outputDir);
@@ -195,17 +224,20 @@ ensureDirectoryExists(outputDir);
 app.post("/upload", async (ctx: any) => {
     // console.log(ctx)
     console.log(typeof (ctx.body.video))
-    try {
+    // try {
         const f = ctx.body.video;
+        let status
         if (!f) {
-            ctx.status = 400
-            return { error: 'No video file provided' };
+            status = 400
+            // return { error: 'No video file provided' };
+            return new Response('No video file provided', {status:status})
         }
 
         const MAX_SIZE = 50 * 1024 * 1024; // 50 MB in bytes
         if (f.size > MAX_SIZE) {
-            ctx.status = 413
-            return { error: 'File size exceeds 50 MB' };;
+            // ctx.status = 413
+            status = 413
+            return new Response('No video file provided', {status:status})
         }
         
 
@@ -221,14 +253,15 @@ app.post("/upload", async (ctx: any) => {
         processVideo(taskId, filePath, outputPath);
 
         // Immediately respond with the taskId
-        ctx.status = 200;
-        ctx.body = { taskId };
+        // ctx.status = 200;
+        // ctx.body = { taskId };
         return { taskId };
-    } catch (error) {
-        console.error('Error in /upload route:', error);
-        ctx.status = 500;
-        return { error: 'Internal Server Error' };
-    }
+    // } 
+    // catch (error) {
+    //     console.error('Error in /upload route:', error);
+    //     ctx.status = 500;
+    //     return { error: 'Internal Server Error' };
+    // }
 }
     ,
     {
@@ -242,12 +275,12 @@ app.get("/download/:fileName", async (ctx: any) => {
     const fileName = ctx.params.fileName;
     const filePath = path.join(outputDir, fileName);
 
-    if (!fs.existsSync(filePath)) {
-        ctx.status = 404;
-        // ctx.body = 'File not found';
+    // if (!fs.existsSync(filePath)) {
+    //     ctx.status = 404;
+    //     // ctx.body = 'File not found';
 
-        return { error: 'File not found' }
-    }
+    //     return { error: 'File not found' }
+    // }
     // Directly set the body to the read stream
     // ctx.body = fs.createReadStream(filePath);
     return Bun.file(filePath);
@@ -290,10 +323,10 @@ app.get("/status/:taskId", async (ctx: any) => {
     const taskId: string = ctx.params.taskId;
     const taskInfo = await getTaskInfo(taskId);
 
-    if (!taskInfo) {
-        ctx.status = 404
-        return { error: 'Task not found' };
-    }
+    // if (!taskInfo) {
+    //     ctx.status = 404
+    //     return { error: 'Task not found' };
+    // }
     return { taskInfo }
 }, {
     params: t.Object({
