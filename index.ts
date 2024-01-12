@@ -64,7 +64,7 @@ const extractFrames = async (videoPath: string, taskId: string, frameRate = 1): 
 }
 
 const findMostCommonColor = async (imagePath: string) => {
-    console.log('getting most common color')
+    // console.log('getting most common color')
     try {
         const image = await Jimp.read(imagePath);
         const colorCounts: Record<string, number> = {};
@@ -85,7 +85,7 @@ const findMostCommonColor = async (imagePath: string) => {
 
         mostCommonColor = mostCommonColor.padStart(6, '0');
 
-        console.log(mostCommonColor)
+        // console.log(mostCommonColor)
         return `#${mostCommonColor}`;
     } catch (error) {
         console.error("An error occurred:", error);
@@ -101,10 +101,10 @@ interface AnalyzeVideoResult {
 
 const analyzeVideo = async (videoPath: string, taskId: string): Promise<AnalyzeVideoResult | null> => {
     try {
-        console.log('getting Frame');
+        // console.log('getting Frame');
         // Ensure frameDirectory is declared as a string
         const frameDirectory: string = await extractFrames(videoPath, taskId);
-        console.log(frameDirectory);
+        // console.log(frameDirectory);
 
         const files = fs.readdirSync(frameDirectory);
         const colorCounts: Record<string, number> = {};
@@ -197,7 +197,7 @@ const MAX_CONCURRENT_TASKS = 2;
 const processQueue = async () => {
     if (currentProcessing < MAX_CONCURRENT_TASKS && taskQueue.length > 0) {
         currentProcessing++;
-        console.log(taskQueue)
+  
         const nextTask = taskQueue.shift(); // Get the next task
         try {
             if(nextTask){
@@ -214,6 +214,7 @@ const processQueue = async () => {
 };
 
 const addToQueue = (taskId: string, filePath:string, outputPath:string) => {
+    console.log(taskQueue)
     taskQueue.push({ taskId, filePath, outputPath });
     processQueue();
 };
@@ -278,14 +279,7 @@ app.post("/upload", async (ctx: any) => {
         const outputPath = `${outputDir}/${fileNameOut}`;
 
         await Bun.write(Bun.file(filePath), f);
-
-        // Start the asynchronous video processing
-        // processVideo(taskId, filePath, outputPath);
         addToQueue(taskId, filePath, outputPath);
-
-        // Immediately respond with the taskId
-        // ctx.status = 200;
-        // ctx.body = { taskId };
         return { taskId };
     }
     catch (error) {
