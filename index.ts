@@ -44,19 +44,19 @@ const extractFrames = async (videoPath: string, taskId: string, frameRate = 1): 
         if (!fs.existsSync(frameDirectory)) {
             fs.mkdirSync(frameDirectory);
         }
-        console.log('Starting frame extraction for:', videoPath);
+        // console.log('Starting frame extraction for:', videoPath);
 
         ffmpeg(videoPath)
             .save(`${frameDirectory}/frame-%03d.jpg`)
             .noAudio()
             .videoFilters(`fps=fps=${frameRate}`)
-            .on("progress", progress => console.log('Frame extraction progress:', progress))
+            // .on("progress", progress => console.log('Frame extraction progress:', progress))
             .on('error', error => {
                 console.error('Error during frame extraction:', error);
                 reject(error)
             })
             .on('end', () => {
-                console.log('Frame extraction completed.');
+                // console.log('Frame extraction completed.');
                 resolve(frameDirectory);
             })
             .run();
@@ -117,7 +117,7 @@ const analyzeVideo = async (videoPath: string, taskId: string): Promise<AnalyzeV
         }
 
         let mostCommonColor = Object.keys(colorCounts).reduce((a, b) => colorCounts[a] > colorCounts[b] ? a : b);
-        console.log('most common color')
+        // console.log('most common color')
         return { mostCommonColor, frameDirectory };
     } catch (error) {
         console.error("An error occurred:", error);
