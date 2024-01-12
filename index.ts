@@ -192,12 +192,12 @@ type TaskQueue = VideoTask[];
 
 const taskQueue: TaskQueue = [];
 let currentProcessing = 0;
-const MAX_CONCURRENT_TASKS = 2;
+const MAX_CONCURRENT_TASKS = 1;
 
 const processQueue = async () => {
     if (currentProcessing < MAX_CONCURRENT_TASKS && taskQueue.length > 0) {
         currentProcessing++;
-  
+        console.log(`${taskQueue}  currently processing ${currentProcessing}}`)
         const nextTask = taskQueue.shift(); // Get the next task
         try {
             if(nextTask){
