@@ -159,6 +159,7 @@ const processVideo = async (taskId: string, filePath: string, outputPath: string
         const insertOrUpdateTask = db.query("INSERT INTO tasks (taskId, status, downloadLink) VALUES (?, ?, ?) ON CONFLICT(taskId) DO UPDATE SET status=?, downloadLink=?");
         insertOrUpdateTask.run(taskId, 'processing', null, 'processing', null);
 
+        //make this part into a queue 
         const analysisResult = await analyzeVideo(filePath, taskId);
 
         if (analysisResult && analysisResult.mostCommonColor) {
@@ -180,6 +181,42 @@ const processVideo = async (taskId: string, filePath: string, outputPath: string
         }
     }
 }
+
+
+interface VideoTask {
+    taskId: string;
+    filePath: string;
+    outputPath: string;
+}
+type TaskQueue = VideoTask[];
+
+const taskQueue: TaskQueue = [];
+let currentProcessing = 0;
+const MAX_CONCURRENT_TASKS = 2;
+
+const processQueue = async () => {
+    if (currentProcessing < MAX_CONCURRENT_TASKS && taskQueue.length > 0) {
+        currentProcessing++;
+        console.log(taskQueue)
+        const nextTask = taskQueue.shift(); // Get the next task
+        try {
+            if(nextTask){
+                await processVideo(nextTask.taskId, nextTask.filePath, nextTask.outputPath);
+            }
+        } catch (error) {
+            console.error('Error in processing video:', error);
+            // Handle error...
+        } finally {
+            currentProcessing--;
+            processQueue(); // Check if there are more tasks to process
+        }
+    }
+};
+
+const addToQueue = (taskId: string, filePath:string, outputPath:string) => {
+    taskQueue.push({ taskId, filePath, outputPath });
+    processQueue();
+};
 
 const app = new Elysia();
 app.use(cors())
@@ -243,7 +280,8 @@ app.post("/upload", async (ctx: any) => {
         await Bun.write(Bun.file(filePath), f);
 
         // Start the asynchronous video processing
-        processVideo(taskId, filePath, outputPath);
+        // processVideo(taskId, filePath, outputPath);
+        addToQueue(taskId, filePath, outputPath);
 
         // Immediately respond with the taskId
         // ctx.status = 200;
