@@ -156,9 +156,6 @@ await init.run();
 
 const processVideo = async (taskId: string, filePath: string, outputPath: string): Promise<void> => {
     try {
-        const insertOrUpdateTask = db.query("INSERT INTO tasks (taskId, status, downloadLink) VALUES (?, ?, ?) ON CONFLICT(taskId) DO UPDATE SET status=?, downloadLink=?");
-        insertOrUpdateTask.run(taskId, 'processing', null, 'processing', null);
-
         //make this part into a queue 
         const analysisResult = await analyzeVideo(filePath, taskId);
 
@@ -200,12 +197,14 @@ const processQueue = async () => {
         console.log(`${taskQueue}  currently processing ${currentProcessing}}`)
         const nextTask = taskQueue.shift(); // Get the next task
         try {
-            if(nextTask){
+            if (nextTask) {
                 await processVideo(nextTask.taskId, nextTask.filePath, nextTask.outputPath);
             }
         } catch (error) {
             console.error('Error in processing video:', error);
             // Handle error...
+            // const updateTaskError = db.query("UPDATE tasks SET status=?, downloadLink=NULL WHERE taskId=?");
+            // updateTaskError.run('error', nextTask.taskId);
         } finally {
             currentProcessing--;
             processQueue(); // Check if there are more tasks to process
@@ -213,7 +212,9 @@ const processQueue = async () => {
     }
 };
 
-const addToQueue = (taskId: string, filePath:string, outputPath:string) => {
+const addToQueue = (taskId: string, filePath: string, outputPath: string) => {
+    const insertOrUpdateTask = db.query("INSERT INTO tasks (taskId, status, downloadLink) VALUES (?, ?, ?) ON CONFLICT(taskId) DO UPDATE SET status=?, downloadLink=?");
+    insertOrUpdateTask.run(taskId, 'processing', null, 'processing', null);
     console.log(taskQueue)
     taskQueue.push({ taskId, filePath, outputPath });
     processQueue();
