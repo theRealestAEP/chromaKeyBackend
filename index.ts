@@ -156,7 +156,6 @@ await init.run();
 
 const processVideo = async (taskId: string, filePath: string, outputPath: string): Promise<void> => {
     try {
-        //make this part into a queue 
         const analysisResult = await analyzeVideo(filePath, taskId);
 
         if (analysisResult && analysisResult.mostCommonColor) {
@@ -170,8 +169,6 @@ const processVideo = async (taskId: string, filePath: string, outputPath: string
     } catch (error: any) {
         console.error('Error in processing video:', error);
         if (error.message) {
-            // taskStatusMap.set(taskId, { status: 'error', error: error.message });
-            // let errorMessage = error.message ? error.message : 'Unknown error';
             console.error('Error in processing video:', error);
             const updateTaskError = db.query("UPDATE tasks SET status=?, downloadLink=NULL WHERE taskId=?");
             updateTaskError.run('error', taskId);
@@ -285,7 +282,6 @@ app.post("/upload", async (ctx: any) => {
     }
     catch (error) {
         console.error('Error in /upload route:', error);
-        // ctx.status = 500;
         return new Response('Error Processing Video', { status: 500 })
     }
 }
@@ -303,15 +299,9 @@ app.get("/download/:fileName", async (ctx: any) => {
 
     if (!fs.existsSync(filePath)) {
         ctx.status = 404;
-        // ctx.body = 'File not found';
-
-        // return { error: 'File not found' }
         return new Response('File not found', { status: 404 })
     }
-    // Directly set the body to the read stream
-    // ctx.body = fs.createReadStream(filePath);
     return Bun.file(filePath);
-    // return ctx.body
 }, {
     params: t.Object({
         fileName: t.String() // Validate fileName as a string
@@ -351,8 +341,6 @@ app.get("/status/:taskId", async (ctx: any) => {
     const taskInfo = await getTaskInfo(taskId);
 
     if (!taskInfo) {
-        // ctx.status = 404
-        // return { error: 'Task not found' };
         return new Response('Task not found', { status: 404 })
     }
     return { taskInfo }
