@@ -311,7 +311,6 @@ app.get("/download/:fileName", async (ctx: any) => {
 interface TaskRow {
     status: 'processing' | 'completed' | 'error';
     downloadLink?: string;
-    // Include other columns if there are more
 }
 
 const getTaskInfo = async (taskId: string): Promise<TaskInfo | undefined> => {
