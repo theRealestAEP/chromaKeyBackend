@@ -14,7 +14,7 @@ const chromaKeyVideo = (inputPath: string, outputPath: string, color: string, si
             .complexFilter([
                 // Apply chroma keying, scale while maintaining aspect ratio, pad, and then scale to 800x800 - all in one filter string         
                 `colorkey=color=${color}:similarity=${similarity}:blend=${blend},scale=800:800:force_original_aspect_ratio=decrease,pad=800:800:(ow-iw)/2:(oh-ih)/2:color=black@0`,
-                `loudnorm=I=-12:LRA=11:TP=-9`
+                `loudnorm=TP=-9`
             ])
             // Add a filter to scale the video while keeping its aspect ratio and add transparent padding to achieve a 1:1 ratio
             .outputOptions('-c:v', 'libvpx-vp9')
